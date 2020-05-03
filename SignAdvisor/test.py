@@ -19,7 +19,7 @@ else:
         sys.exit()
 
 TEST = 0
-position = []
+bottom_left_sign_position = []
 height_sign = 0
 width_sign = 0
 PATH = "../Sign_ComputerVisionProject/"
@@ -45,7 +45,7 @@ def showKeyPoints(image, keyPoints):
 def find_query_in_train(good_matches, kp_query, kp_train, img_train, img_query):
     MIN_MATCH = 10
     projected_points = []
-    if len(good_matches) > MIN_MATCH:
+    if len(good_matches) >= MIN_MATCH:
         query_pts = np.float32([kp_query[m.queryIdx].pt for m in good_matches]).reshape(-1,1,2)
         train_pts = np.float32([kp_train[m.trainIdx].pt for m in good_matches]).reshape(-1,1,2)
         H, mask = cv2.findHomography(query_pts, train_pts, cv2.RANSAC, 5.0)
@@ -70,7 +70,9 @@ def add_rating(image, rating_value, sign_points):
     #test_img = cv2.polylines(test_img,[np.int32(sign_points)],True,[0,0,255],2,cv2.LINE_AA)
     #show_image(test_img)
     h_t,w_t, _ = image.shape
-    path_rating_image = "../Rating/" + str(rating_value).replace(".","_")+".png"
+    rating_value_string = str(rating_value)
+    path_rating_image = "../Rating/"
+    path_rating_image = path_rating_image + rating_value_string.replace(".", "_") + ".png"
     print(path_rating_image)
     img_rating = cv2.imread(path_rating_image)
     #img_rating = cv2.resize(img_rating, (width_sign, height_sign), interpolation=cv2.INTER_AREA)
@@ -94,17 +96,16 @@ def add_rating(image, rating_value, sign_points):
         test_mask = np.all(final_image == i , axis=-1)
         final_image[test_mask] = image[test_mask]
 
-    position = sign_points[3][0]
-    position = position.astype('int')
-    print("Position before translation {} , {} ".format(position, position[1]))
+    bottom_left_corner_sign = sign_points[3][0]
+    bottom_left_corner_sign = bottom_left_corner_sign.astype('int')
+    print("Position before translation {} , {} ".format(bottom_left_corner_sign[0], bottom_left_corner_sign[1]))
     #p = (int(position[0] - width_sign/2), int(position[1] + height_sign/2))
-    p = (position[0], int(position[1] + height_sign/2))
-    print(p)
-
-    print("Position after translation {}".format(position))
+    string_position = (bottom_left_corner_sign[0], int(bottom_left_corner_sign[1] + height_sign/2))
+    print(string_position)
+    print("Position after translation {}".format(string_position))
     font  = cv2.FONT_HERSHEY_SIMPLEX
-    cv2.putText(final_image, "Click Here for Info", p, font,0.5, (255,255,255), 1, cv2.LINE_AA)
-    return final_image, height_sign, width_sign
+    cv2.putText(final_image, "Click Here for Info", string_position, font,0.5, (255,255,255), 1, cv2.LINE_AA)
+    return final_image, height_sign, width_sign, bottom_left_corner_sign
 
 
 def match_descriptor(descriptor_query, descriptor_train):
@@ -122,8 +123,8 @@ def match_descriptor(descriptor_query, descriptor_train):
     return good_matches
 
 def open_browser(coordinate):
-    h = range(position[1], position[1] + height_sign)
-    w = range(position[0], position[0] + width_sign)
+    h = range(bottom_left_sign_position[1], bottom_left_sign_position[1] + height_sign)
+    w = range(bottom_left_sign_position[0], bottom_left_sign_position[0] + width_sign)
     if (coordinate[0][0] in w) & (coordinate[0][1] in h):
         webbrowser.open(link, new=2)
 
@@ -137,23 +138,26 @@ def capture_click(event, x, y, flags, params):
 
 img_train = cv2.imread(path)
 sign_name = mySQLConnector.get_sign_name()
-
+# istanzio SIFT
+final_image = []
+sift = cv2.xfeatures2d.SIFT_create()
+# trovo i keypoints nell'immagine di test
+kp_train = sift.detect(img_train)
+kp_train, descriptor_train = sift.compute(img_train, kp_train)
 for name in sign_name:
+    print("Current name {}".format(name))
     string = PATH+name
+    print(string)
     img_query = cv2.imread(string)
-    final_image = []
-    # istanzio SIFT
-    sift = cv2.xfeatures2d.SIFT_create()
     # trovo i keypoints nell'immagine query
     kp_query = sift.detect(img_query)
-    # trovo i keypoints nell'immagine di test
-    kp_train = sift.detect(img_train)
+    #showKeyPoints(img_query,kp_query)
     # ora devo calcolare i descriptor dei keypoints
     kp_query, descriptor_query = sift.compute(img_query, kp_query)
-    kp_train, descriptor_train = sift.compute(img_train, kp_train)
     # match descriptor
     good_matches = match_descriptor(descriptor_query,descriptor_train)
     code, projected_points = find_query_in_train(good_matches, kp_query, kp_train, img_train, img_query)
+    print("Code ",code)
     if code == 0:
         found = True
         found_name = name
@@ -163,7 +167,8 @@ if found:
     print(found_name)
     info = mySQLConnector.get_info_found_sign(str(found_name))
     link = info[1]
-    final_image,height_sign,width_sign = add_rating(img_train, info[0], projected_points)
+    final_image,height_sign,width_sign,bottom_left_sign_position = add_rating(img_train, info[0], projected_points)
+    print(height_sign, width_sign)
     cv2.namedWindow("image")
     cv2.setMouseCallback("image", capture_click)
 
