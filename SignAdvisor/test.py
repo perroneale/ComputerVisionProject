@@ -3,21 +3,11 @@ import numpy as np
 from matplotlib import pyplot as plt
 import webbrowser
 import mySQLConnector
-import json
+import generalizeHoughTransform as ght
 import sys
 import os
 
 path = ""
-if len(sys.argv) < 2:
-    print("Devi passare il path dell'immagine allo script")
-    sys.exit()
-else:
-    path = sys.argv[1]
-    print(path)
-    if os.path.isfile(path) == False:
-        print("L'immagine non esiste")
-        sys.exit()
-
 TEST = 0
 bottom_left_sign_position = []
 height_sign = 0
@@ -27,6 +17,17 @@ projected_points = []
 found = False
 link = ""
 found_name = ""
+
+if len(sys.argv) < 2:
+    print("Devi passare il path dell'immagine allo script")
+    path = "../Sign_test_photo/test_prosciutteria.jpg"
+    #sys.exit()
+else:
+    path = sys.argv[1]
+    print(path)
+    if os.path.isfile(path) == False:
+        print("L'immagine non esiste")
+        sys.exit()
 
 def show_image(image):
     plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
@@ -45,9 +46,17 @@ def showKeyPoints(image, keyPoints):
 def find_query_in_train(good_matches, kp_query, kp_train, img_train, img_query):
     MIN_MATCH = 10
     projected_points = []
+    print(good_matches)
     if len(good_matches) >= MIN_MATCH:
+        print("Keypoints")
+        print(kp_train[0].angle)
         query_pts = np.float32([kp_query[m.queryIdx].pt for m in good_matches]).reshape(-1,1,2)
         train_pts = np.float32([kp_train[m.trainIdx].pt for m in good_matches]).reshape(-1,1,2)
+        print(query_pts)
+        gradient_orientation_query = np.uint([kp_query[m.queryIdx].angle for m in good_matches]).reshape(-1,1)
+        gradient_orientation_train = np.uint([kp_train[m.trainIdx].angle for m in good_matches]).reshape(-1,1)
+        ght.create_R_table(query_pts,gradient_orientation_query,img_query.shape)
+        ght.online(gradient_orientation_train, train_pts,img_train.shape, img_query.shape)
         H, mask = cv2.findHomography(query_pts, train_pts, cv2.RANSAC, 5.0)
         h,w,_ = img_query.shape
         points_to_project = np.float32([[0,0],[w-1,0],[w-1,h-1],[0,h-1]]).reshape(-1,1,2)
@@ -151,7 +160,7 @@ for name in sign_name:
     img_query = cv2.imread(string)
     # trovo i keypoints nell'immagine query
     kp_query = sift.detect(img_query)
-    #showKeyPoints(img_query,kp_query)
+    showKeyPoints(img_query,kp_query)
     # ora devo calcolare i descriptor dei keypoints
     kp_query, descriptor_query = sift.compute(img_query, kp_query)
     # match descriptor
