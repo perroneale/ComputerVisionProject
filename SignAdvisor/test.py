@@ -56,7 +56,18 @@ def find_query_in_train(good_matches, kp_query, kp_train, img_train, img_query):
         gradient_orientation_query = np.uint([kp_query[m.queryIdx].angle for m in good_matches]).reshape(-1,1)
         gradient_orientation_train = np.uint([kp_train[m.trainIdx].angle for m in good_matches]).reshape(-1,1)
         ght.create_R_table(query_pts,gradient_orientation_query,img_query.shape)
-        ght.online(gradient_orientation_train, train_pts,img_train.shape, img_query.shape)
+        r,scale = ght.online(gradient_orientation_train, train_pts,img_train.shape)
+        copy = img_train.copy()
+        cv2.circle(copy,(r[0],r[1]),10,(0,255,0),2,cv2.LINE_AA)
+        h_q,w_q ,_ = img_query.shape
+        h_q,w_q = h_q*scale,w_q*scale
+        starting_point = (int(r[0] - w_q/2), int(r[1] - h_q/2))
+        print(starting_point)
+        finish_point = (int(r[0] + w_q/2), int(r[1] + h_q/2))
+        print(finish_point)
+        cv2.rectangle(copy,starting_point, finish_point, (0,0,255),1,cv2.LINE_AA)
+        plt.imshow(cv2.cvtColor(copy, cv2.COLOR_BGR2RGB))
+        plt.show()
         H, mask = cv2.findHomography(query_pts, train_pts, cv2.RANSAC, 5.0)
         h,w,_ = img_query.shape
         points_to_project = np.float32([[0,0],[w-1,0],[w-1,h-1],[0,h-1]]).reshape(-1,1,2)
