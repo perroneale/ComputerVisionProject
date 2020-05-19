@@ -36,12 +36,14 @@ def create_R_table(query_pts, query_orientation, image_shape):
         else:
             r_table[gradient_index] = [r]
     print("Terminata creazione R_table")
+    print(r_table)
     return r_table
 
 
 
 #online phase, istanzio un accumulator array a 3 dimensioni, i,j,scaling
 def online(orientation_train, train_pts,train_shape, r_table):
+    print(orientation_train)
     start_time = time.time()
     print("Inizio online phase GHT")
     h,w= train_shape
@@ -49,14 +51,20 @@ def online(orientation_train, train_pts,train_shape, r_table):
     #effettuando degli esperimenti (impostando un passo di 0.01) il tempo impiegato per eseguire la fase online
     #aumentava considerevolmente, ottenendo una posizione di y più precisa di un solo pixel sulla coordinata x.
     scaling = np.arange(0.01,1.01,0.01)
+    #angle = np.arange(0,361,1)
     print(scaling)
     train_pts = train_pts.astype(int).reshape(-1,2)
     accumulator_array = np.zeros((h, w,len(scaling)), dtype=np.uint)
-    for i in range(0, orientation_train.shape[0]-1):
+    len_r_tabel = len(r_table)
+    print(len_r_tabel)
+    accumulator = 0
+    for i in range(0, orientation_train.shape[0]):
         gradient_index = str(orientation_train[i])
         if gradient_index in r_table:
+            print("Gradient_index ",gradient_index)
             #estraggo i vettori associati al gradiente del keypoints considerato
             r_vector = r_table[gradient_index]
+            print(r_vector)
             #per ogni vettore calcolo le coordinate di y, considerando tutti i possibili valori di scala
             for vector in r_vector:
                 for scale in scaling:
@@ -79,11 +87,26 @@ def online(orientation_train, train_pts,train_shape, r_table):
                         print("Errore Scaling {}".format(scale))
                     else:
                         #effettuo la votazione
-                        accumulator_array[y_x][y_y][np.where(scaling == scale)] = accumulator_array[y_x][y_y][np.where(scaling == scale)] + 1
+                       accumulator_array[y_x][y_y][np.where(scaling == scale)] = accumulator_array[y_x][y_y][np.where(scaling == scale)] + 1
+        else:
+            accumulator += 1
     #ottengo le coordinate ed il fattore di scala della posizione nell'accumulator array con il maggior numero di voti
+    print(accumulator)
     y_target = np.unravel_index(accumulator_array.argmax(), accumulator_array.shape)
+    partial_candidate = []
+    if accumulator >= len_r_tabel:
+        code = -1
+    else:
+        value = accumulator_array[y_target]
+        candidate = np.argwhere(accumulator_array == value)
+        for w in candidate:
+            if w[2] > 0:
+                partial_candidate.append(w)
+        code = 0
+        print(partial_candidate)
+    partial_candidate = np.array(partial_candidate, dtype=np.uint)
     print("Maximum y = {}, scale factor = {}, value = {}".format(y_target, scaling[y_target[2]], accumulator_array[y_target]))
     elapsed_time = time.time() - start_time
     print("Tempo impiegato fase online ",elapsed_time)
     print("Fine online phase GHT")
-    return y_target, scaling[y_target[2]]
+    return y_target, scaling[y_target[-1]],code, partial_candidate

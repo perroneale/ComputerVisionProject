@@ -22,11 +22,11 @@ link = ""
 found_name = ""
 
 if len(sys.argv) < 2:
-    print("Devi passare il path dell'immagine allo script")
-    path = "../Sign_test_photo/sonora.jpg"
-    #sys.exit()
+    print("Devi passare il nome, inclusa l'estensione dell'immagine allo script")
+    #path = "../Sign_test_photo/sonora_night.jpg"
+    sys.exit()
 else:
-    path = sys.argv[1]
+    path = "../Sign_test_photo/"+sys.argv[1]
     print(path)
     if os.path.isfile(path) == False:
         print("L'immagine non esiste")
@@ -45,21 +45,11 @@ def showKeyPoints(image, keyPoints):
                                                    flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
     plt.imshow(cv2.cvtColor(img_visualization_kp_query, cv2.COLOR_BGR2RGB))
     plt.show()
-def calculate_avereage(image):
-    h,w = image.shape[:2]
-    sum = 0
-    for i in range(0,h-1):
-        for j in range(0,w-1):
-            sum = sum + image[i,j]
-    mean = sum/(h*w)
-    return mean
 
 def zmNCC(img_model, img_target):
     h_t, w_t = img_target.shape[:2]
     img_model = cv2.resize(img_model, (w_t,h_t))
-    show_image_grayscale(img_model)
-    print("Shape model ",img_model.shape)
-    print("Shape train ",img_target.shape)
+    #show_image_grayscale(img_model)
     average_m = np.mean(img_model)
     average_t = np.mean(img_target)
     numerator = np.sum(np.multiply((img_target - average_t), (img_model - average_m)))
@@ -76,6 +66,8 @@ def zmNCC(img_model, img_target):
 def estimate_position(good_matches, kp_query, kp_train, img_train_bw, img_query):
     MIN_MATCH = 10
     projected_points = []
+    scaling = np.arange(0.01,1.01,0.01)
+
     if len(good_matches) >= MIN_MATCH:
         query_pts = np.float32([kp_query[m.queryIdx].pt for m in good_matches]).reshape(-1,1,2)
         train_pts = np.float32([kp_train[m.trainIdx].pt for m in good_matches]).reshape(-1,1,2)
@@ -83,33 +75,55 @@ def estimate_position(good_matches, kp_query, kp_train, img_train_bw, img_query)
         gradient_orientation_query = np.uint([kp_query[m.queryIdx].angle for m in good_matches]).reshape(-1,1)
         gradient_orientation_train = np.uint([kp_train[m.trainIdx].angle for m in good_matches]).reshape(-1,1)
         r_table = ght.create_R_table(query_pts,gradient_orientation_query,img_query.shape)
-        y,scale = ght.online(gradient_orientation_train, train_pts,img_train_bw.shape, r_table)
-        copy = img_train.copy()
-        cv2.circle(copy,(y[0],y[1]),10,(0,255,0),2,cv2.LINE_AA)
-        h_q,w_q = img_query.shape
-        h_q,w_q = h_q*scale,w_q*scale
-        starting_point = (int(y[0] - w_q/2), int(y[1] - h_q/2))
-        finish_point = (int(y[0] + w_q/2), int(y[1] + h_q/2))
-        roi = img_train_bw[starting_point[1]:starting_point[1]+int(h_q)+1,starting_point[0]:starting_point[0]+int(w_q)+1]
-        show_image_grayscale(roi)
-        score = zmNCC(img_query, roi)
-        print("SCORE = ",score)
-
-        if score >= 0.7 and score <= 1:
-            cv2.rectangle(copy, starting_point, finish_point, (0, 0, 255), 1, cv2.LINE_AA)
-            plt.imshow(cv2.cvtColor(copy, cv2.COLOR_BGR2RGB))
-            plt.show()
-            # per stimare l'omografia utilizzo l'algoritmo RANSAC che permette di considerare solo i match corretti e non
-            # quelli alterati dal rumore.
-            H, mask = cv2.findHomography(query_pts, train_pts, cv2.RANSAC, 5.0)
-            h, w, = img_query.shape
-            # proietto un rettangolo, con le dimensioni della model image nella target image utilizzando l'omografia
-            points_to_project = np.float32([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]]).reshape(-1, 1, 2)
-            projected_points = cv2.perspectiveTransform(points_to_project, H)
-            return 0, projected_points
-        else:
+        y, scale, code,partial_candidate = ght.online(gradient_orientation_train, train_pts,img_train_bw.shape, r_table)
+        if code == -1:
             print("Second check fails")
             return -1, projected_points
+        else:
+            score = 0
+            for pc in partial_candidate:
+                h_q, w_q = img_query.shape
+                scale_2 = scaling[pc[-1]]
+                print(scale_2)
+                h_q, w_q = h_q * scale_2 , w_q * scale_2
+                starting_point = (int(pc[0] - w_q / 2), int(pc[1] - h_q / 2))
+                roi = img_train_bw[starting_point[1]:starting_point[1] + int(h_q) + 1,starting_point[0]:starting_point[0] + int(w_q) + 1]
+                h_roi, w_roi = roi.shape
+                if h_roi == 0 or w_roi == 0:
+                    continue
+                else:
+                    current_score = zmNCC(img_query, roi)
+                    if current_score >= score:
+                        score = current_score
+                        y = pc
+
+            scale = scaling[y[-1]]
+            copy = img_train.copy()
+            cv2.circle(copy,(y[0],y[1]),10,(0,255,0),2,cv2.LINE_AA)
+            h_q, w_q = img_query.shape
+            h_q,w_q = h_q*scale,w_q*scale
+            starting_point = (int(y[0] - w_q/2), int(y[1] - h_q/2))
+            finish_point = (int(y[0] + w_q/2), int(y[1] + h_q/2))
+            roi = img_train_bw[starting_point[1]:starting_point[1]+int(h_q)+1,starting_point[0]:starting_point[0]+int(w_q)+1]
+            show_image_grayscale(roi)
+            score = zmNCC(img_query, roi)
+            print("SCORE = ",score)
+
+            if score >= 0.7 and score <= 1:
+                cv2.rectangle(copy, starting_point, finish_point, (0, 0, 255), 1, cv2.LINE_AA)
+                plt.imshow(cv2.cvtColor(copy, cv2.COLOR_BGR2RGB))
+                plt.show()
+                # per stimare l'omografia utilizzo l'algoritmo RANSAC che permette di considerare solo i match corretti e non
+                # quelli alterati dal rumore.
+                H, mask = cv2.findHomography(query_pts, train_pts, cv2.RANSAC, 5.0)
+                h, w, = img_query.shape
+                # proietto un rettangolo, con le dimensioni della model image nella target image utilizzando l'omografia
+                points_to_project = np.float32([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]]).reshape(-1, 1, 2)
+                projected_points = cv2.perspectiveTransform(points_to_project, H)
+                return 0, projected_points
+            else:
+                print("Second check fails")
+                return -1, projected_points
     else:
         print("Not enough matches found")
         return -1, projected_points
@@ -155,8 +169,8 @@ def add_rating(image_train, rating_value, sign_points,window_w, window_h):
     string_position = (bottom_left_corner_sign[0], int(bottom_left_corner_sign[1] + height_sign/2))
 
     font  = cv2.FONT_HERSHEY_DUPLEX
-    fontscale = int((window_h*window_w)/(1000*100))
-    cv2.putText(final_image, "Click Here for Info", string_position, font,fontscale, (0,255,0), 2, cv2.LINE_AA)
+    fontscale = 2
+    cv2.putText(final_image, "More Info", string_position, font,fontscale, (0,255,0), 2, cv2.LINE_AA)
     return final_image, height_sign, width_sign, bottom_left_corner_sign
 
 #il match dei descriptor viene eseguito tramite kd_tree
@@ -234,14 +248,14 @@ if found:
 
     cv2.namedWindow("image",cv2.WINDOW_KEEPRATIO)
     w_size, h_size = pyautogui.size()
-    print(w_size,h_size)
     final_image,height_sign,width_sign,bottom_left_sign_position = add_rating(img_train, info[0], projected_points,int(w_size/2),int(h_size/2))
+    final_image_resized = cv2.resize(final_image,(int(w_size/2),int(h_size/2)))
     cv2.moveWindow("image",0,0)
     cv2.resizeWindow("image", int(w_size/2),int(h_size/2))
     cv2.setMouseCallback("image", capture_click)
 
     while True:
-        cv2.imshow("image", final_image)
+        cv2.imshow("image", final_image_resized)
 
         key = cv2.waitKey(1)
 

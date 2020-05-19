@@ -20,7 +20,7 @@ def zmNCC(img_model, img_target):
     h_m, w_m = img_model.shape[:2]
     h_t, w_t = img_target.shape[:2]
     img_model = cv2.resize(img_model, (w_t,h_t))
-    show_image_grayscale(img_model)
+    #show_image_grayscale(img_model)
     print("Shape model ",img_model.shape)
     print("Shape train ",img_target.shape)
     av = calculate_avereage(img_model)
@@ -50,8 +50,8 @@ def zmNCC(img_model, img_target):
 img_model = cv2.imread("../Sign_ComputerVisionProject/sonora.png",0)
 img_target = cv2.imread("../Sign_ComputerVisionProject/sonora.png",0)
 
-score = zmNCC(img_model,img_target)
-print(score)
+#score = zmNCC(img_model,img_target)
+#print(score)
 
 
 # h_m, w_m = img_model.shape[:2]
