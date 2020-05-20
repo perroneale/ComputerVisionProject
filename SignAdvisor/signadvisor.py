@@ -23,8 +23,8 @@ found_name = ""
 
 if len(sys.argv) < 2:
     print("Devi passare il nome, inclusa l'estensione dell'immagine allo script")
-    #path = "../Sign_test_photo/sonora_night.jpg"
-    sys.exit()
+    path = "../Sign_test_photo/rosticceria_moscara.jpg"
+    #sys.exit()
 else:
     path = "../Sign_test_photo/"+sys.argv[1]
     print(path)
@@ -166,7 +166,7 @@ def add_rating(image_train, rating_value, sign_points,window_w, window_h):
     #aggiungo il testo cliccabile per ottenere aorire il browser con l'indirizzo tripadvisor
     bottom_left_corner_sign = sign_points[3][0]
     bottom_left_corner_sign = bottom_left_corner_sign.astype('int')
-    string_position = (bottom_left_corner_sign[0], int(bottom_left_corner_sign[1] + height_sign/2))
+    string_position = (bottom_left_corner_sign[0], int(bottom_left_corner_sign[1] + height_sign/2 + 10))
 
     font  = cv2.FONT_HERSHEY_DUPLEX
     fontscale = 2
@@ -194,6 +194,7 @@ def match_descriptor(descriptor_query, descriptor_train):
 def open_browser(coordinate):
     h = range(bottom_left_sign_position[1], bottom_left_sign_position[1] + height_sign)
     w = range(bottom_left_sign_position[0], bottom_left_sign_position[0] + width_sign)
+
     if (coordinate[0][0] in w) & (coordinate[0][1] in h):
         webbrowser.open(link, new=2)
 
@@ -250,6 +251,11 @@ if found:
     w_size, h_size = pyautogui.size()
     final_image,height_sign,width_sign,bottom_left_sign_position = add_rating(img_train, info[0], projected_points,int(w_size/2),int(h_size/2))
     final_image_resized = cv2.resize(final_image,(int(w_size/2),int(h_size/2)))
+    ratio_h = final_image.shape[0]/final_image_resized.shape[0]
+    ratio_w = final_image.shape[1] / final_image_resized.shape[1]
+    bottom_left_sign_position[0] = int(bottom_left_sign_position[0]/ratio_w)
+    bottom_left_sign_position[1] = int(bottom_left_sign_position[1]/ratio_h)
+    cv2.rectangle(final_image_resized,(bottom_left_sign_position[0], bottom_left_sign_position[1]),(bottom_left_sign_position[0] + width_sign, bottom_left_sign_position[1] + height_sign) , (255, 0, 0), 1)
     cv2.moveWindow("image",0,0)
     cv2.resizeWindow("image", int(w_size/2),int(h_size/2))
     cv2.setMouseCallback("image", capture_click)
