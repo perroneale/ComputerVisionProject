@@ -52,8 +52,6 @@ def zmNCC(img_model, img_target):
     h_t, w_t = img_target.shape[:2]
     #print(w_t,h_t)
     img_model = cv2.resize(img_model, (w_t,h_t))
-    show_image_grayscale(img_model)
-    show_image_grayscale(img_target)
     average_m = np.mean(img_model)
     average_t = np.mean(img_target)
     numerator = np.sum(np.multiply((img_target - average_t), (img_model - average_m)))
@@ -67,9 +65,6 @@ def ssd(img_model, img_target):
     h_t, w_t = img_target.shape[:2]
     #print(w_t,h_t)
     img_model = cv2.resize(img_model, (w_t,h_t))
-    show_image_grayscale(img_model)
-    show_image_grayscale(img_target)
-
     diff = np.subtract((img_target), (img_model))
     square = np.square(diff)
     SSD = np.sum(square)
@@ -112,8 +107,6 @@ def estimate_position(good_matches, kp_query, kp_train, img_train_bw, img_query_
             #show_image_grayscale(roi)
             score = zmNCC(img_query_bw, roi)
             print("ZMNCC = ",score)
-            score2 = ssd(img_query_bw, roi)
-            print("SSD = ",score2)
             if 0.5 <= score <= 1:
                 # cv2.rectangle(copy, starting_point, finish_point, (0, 0, 255), 1, cv2.LINE_AA)
                 # plt.imshow(cv2.cvtColor(copy, cv2.COLOR_BGR2RGB))
