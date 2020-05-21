@@ -92,8 +92,6 @@ def estimate_position(good_matches, kp_query, kp_train, img_train_bw, img_query_
         h_q, w_q = img_query_bw.shape
         scale = scaling[dim[0]]
         print(scale)
-        rotation =  - dim[1]
-        rot_img_train = imutils.rotate(img_train_bw,rotation)
         h_q, w_q = h_q * scale, w_q * scale
         if y_target[1] - w_q/2 <= 0 or y_target[0] - h_q/2 <= 0:
             print("Second check fails")
@@ -101,9 +99,8 @@ def estimate_position(good_matches, kp_query, kp_train, img_train_bw, img_query_
         else:
             #copy = img_train.copy()
             # cv2.circle(copy,(y_target[0],y_target[1]),10,(0,255,0),2,cv2.LINE_AA)
-
             starting_point = (int(y_target[1] - w_q/2), int(y_target[0] - h_q/2))
-            roi = rot_img_train[starting_point[1]:starting_point[1]+int(h_q),starting_point[0]:starting_point[0]+int(w_q)]
+            roi = img_train_bw[starting_point[1]:starting_point[1]+int(h_q),starting_point[0]:starting_point[0]+int(w_q)]
             #show_image_grayscale(roi)
             score = zmNCC(img_query_bw, roi)
             print("ZMNCC = ",score)
