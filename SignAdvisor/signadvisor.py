@@ -3,12 +3,12 @@ import numpy as np
 from matplotlib import pyplot as plt
 import webbrowser
 import mySQLConnector
-import generalizeHoughTransform as ght
 import sys
 import os
 import pyautogui
 import math
-import test
+import houghtransform
+import imutils
 
 path = ""
 img_train = []
@@ -24,9 +24,9 @@ found_name = ""
 img_query = []
 
 if len(sys.argv) < 2:
-    print("Devi passare il nome, inclusa l'estensione dell'immagine allo script")
-    path = "../Sign_test_photo/portici_salentini.jpg"
-    #sys.exit()
+    print("Devi passare il nome, inclusa l'estensione dell'immagine, allo script")
+    #path = "../Sign_test_photo/rusticone.jpg"
+    sys.exit()
 else:
     path = "../Sign_test_photo/"+sys.argv[1]
     print(path)
@@ -50,8 +50,10 @@ def showKeyPoints(image, keyPoints):
 
 def zmNCC(img_model, img_target):
     h_t, w_t = img_target.shape[:2]
+    #print(w_t,h_t)
     img_model = cv2.resize(img_model, (w_t,h_t))
-    #show_image_grayscale(img_model)
+    show_image_grayscale(img_model)
+    show_image_grayscale(img_target)
     average_m = np.mean(img_model)
     average_t = np.mean(img_target)
     numerator = np.sum(np.multiply((img_target - average_t), (img_model - average_m)))
@@ -61,6 +63,19 @@ def zmNCC(img_model, img_target):
     zmncc = numerator / den_m
     return zmncc
 
+def ssd(img_model, img_target):
+    h_t, w_t = img_target.shape[:2]
+    #print(w_t,h_t)
+    img_model = cv2.resize(img_model, (w_t,h_t))
+    show_image_grayscale(img_model)
+    show_image_grayscale(img_target)
+
+    diff = np.subtract((img_target), (img_model))
+    square = np.square(diff)
+    SSD = np.sum(square)
+    print(SSD)
+    return SSD
+
 #Determino la posizione della model image all'interno della target image
 #Per determinare la posizione, partendo dalle corrispondenze presenti in good_matches
 #tra model e target image, devo calcolare una trasformazione che mi permetta di proiettare i punti
@@ -69,37 +84,40 @@ def estimate_position(good_matches, kp_query, kp_train, img_train_bw, img_query_
     MIN_MATCH = 15
     projected_points = []
     scaling = np.arange(0.01,1.01,0.01)
-
     if len(good_matches) >= MIN_MATCH:
         query_pts = np.float32([kp_query[m.queryIdx].pt for m in good_matches]).reshape(-1,1,2)
         train_pts = np.float32([kp_train[m.trainIdx].pt for m in good_matches]).reshape(-1,1,2)
 
-        gradient_orientation_query = np.uint([kp_query[m.queryIdx].angle for m in good_matches]).reshape(-1,1)
-        gradient_orientation_train = np.uint([kp_train[m.trainIdx].angle for m in good_matches]).reshape(-1,1)
-        scale_query = np.uint([kp_query[m.queryIdx].size for m in good_matches])
-        scale_train = np.uint([kp_train[m.trainIdx].size for m in good_matches])
-        set = test.off_line(query_pts,gradient_orientation_query,scale_query,img_query)
-        y_target = test.on_line_phase(train_pts,gradient_orientation_train,scale_train,set,img_train)
+        # gradient_orientation_query = np.uint([kp_query[m.queryIdx].angle for m in good_matches]).reshape(-1,1)
+        # gradient_orientation_train = np.uint([kp_train[m.trainIdx].angle for m in good_matches]).reshape(-1,1)
+        # scale_query = np.uint([kp_query[m.queryIdx].size for m in good_matches])
+        # scale_train = np.uint([kp_train[m.trainIdx].size for m in good_matches])
+        y_target,dim = houghtransform.hough_transform(good_matches, kp_train, kp_query, img_train)
+
         h_q, w_q = img_query_bw.shape
-        scale = scaling[y_target[2]]
+        scale = scaling[dim[0]]
+        print(scale)
+        rotation =  - dim[1]
+        rot_img_train = imutils.rotate(img_train_bw,rotation)
         h_q, w_q = h_q * scale, w_q * scale
-        if y_target[0] - w_q/2 <= 0 or y_target[1] - h_q/2 <= 0:
+        if y_target[1] - w_q/2 <= 0 or y_target[0] - h_q/2 <= 0:
             print("Second check fails")
             return -1, projected_points
         else:
-            copy = img_train.copy()
-            cv2.circle(copy,(y_target[0],y_target[1]),10,(0,255,0),2,cv2.LINE_AA)
-            starting_point = (int(y_target[0] - w_q/2), int(y_target[1] - h_q/2))
-            finish_point = (int(y_target[0] + w_q/2), int(y_target[1] + h_q/2))
-            roi = img_train_bw[starting_point[1]:starting_point[1]+int(h_q)+1,starting_point[0]:starting_point[0]+int(w_q)+1]
-            show_image_grayscale(roi)
-            score = zmNCC(img_query_bw, roi)
-            print("SCORE = ",score)
+            #copy = img_train.copy()
+            # cv2.circle(copy,(y_target[0],y_target[1]),10,(0,255,0),2,cv2.LINE_AA)
 
-            if score >= 0.7 and score <= 1:
-                cv2.rectangle(copy, starting_point, finish_point, (0, 0, 255), 1, cv2.LINE_AA)
-                plt.imshow(cv2.cvtColor(copy, cv2.COLOR_BGR2RGB))
-                plt.show()
+            starting_point = (int(y_target[1] - w_q/2), int(y_target[0] - h_q/2))
+            roi = rot_img_train[starting_point[1]:starting_point[1]+int(h_q),starting_point[0]:starting_point[0]+int(w_q)]
+            #show_image_grayscale(roi)
+            score = zmNCC(img_query_bw, roi)
+            print("ZMNCC = ",score)
+            score2 = ssd(img_query_bw, roi)
+            print("SSD = ",score2)
+            if 0.5 <= score <= 1:
+                # cv2.rectangle(copy, starting_point, finish_point, (0, 0, 255), 1, cv2.LINE_AA)
+                # plt.imshow(cv2.cvtColor(copy, cv2.COLOR_BGR2RGB))
+                # plt.show()
                 # per stimare l'omografia utilizzo l'algoritmo RANSAC che permette di considerare solo i match corretti e non
                 # quelli alterati dal rumore.
                 H, mask = cv2.findHomography(query_pts, train_pts, cv2.RANSAC, 5.0)
@@ -107,8 +125,8 @@ def estimate_position(good_matches, kp_query, kp_train, img_train_bw, img_query_
                 # proietto un rettangolo, con le dimensioni della model image nella target image utilizzando l'omografia
                 points_to_project = np.float32([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]]).reshape(-1, 1, 2)
                 projected_points = cv2.perspectiveTransform(points_to_project, H)
-                img_train = cv2.polylines(img_train, [np.int32(projected_points)],True, 255,3,cv2.LINE_AA)
-                show_image(img_train)
+                img_train = cv2.polylines(img_train, [np.int32(projected_points)],True, (0,0,255),3,cv2.LINE_AA)
+                #show_image(img_train)
                 return 0, projected_points
             else:
                 print("Second check fails")
@@ -116,61 +134,6 @@ def estimate_position(good_matches, kp_query, kp_train, img_train_bw, img_query_
     else:
         print("Not enough matches found")
         return -1, projected_points
-
-    #     r_table = ght.create_R_table(query_pts,gradient_orientation_query,img_query.shape)
-    #     y, scale, code,partial_candidate = ght.online(gradient_orientation_train, train_pts,img_train_bw.shape, r_table, img_train)
-    #     if code == -1:
-    #         print("Second check fails")
-    #         return -1, projected_points
-    #     else:
-    #         score = 0
-    #         for pc in partial_candidate:
-    #             h_q, w_q = img_query.shape
-    #             scale_2 = scaling[pc[-1]]
-    #             print(scale_2)
-    #             h_q, w_q = h_q * scale_2 , w_q * scale_2
-    #             starting_point = (int(pc[0] - w_q / 2), int(pc[1] - h_q / 2))
-    #             roi = img_train_bw[starting_point[1]:starting_point[1] + int(h_q) + 1,starting_point[0]:starting_point[0] + int(w_q) + 1]
-    #             h_roi, w_roi = roi.shape
-    #             if h_roi == 0 or w_roi == 0:
-    #                 continue
-    #             else:
-    #                 current_score = zmNCC(img_query, roi)
-    #                 if current_score >= score:
-    #                     score = current_score
-    #                     y = pc
-    #
-    #         scale = scaling[y[-1]]
-    #         copy = img_train.copy()
-    #         cv2.circle(copy,(y[0],y[1]),10,(0,255,0),2,cv2.LINE_AA)
-    #         h_q, w_q = img_query.shape
-    #         h_q,w_q = h_q*scale,w_q*scale
-    #         starting_point = (int(y[0] - w_q/2), int(y[1] - h_q/2))
-    #         finish_point = (int(y[0] + w_q/2), int(y[1] + h_q/2))
-    #         roi = img_train_bw[starting_point[1]:starting_point[1]+int(h_q)+1,starting_point[0]:starting_point[0]+int(w_q)+1]
-    #         show_image_grayscale(roi)
-    #         score = zmNCC(img_query, roi)
-    #         print("SCORE = ",score)
-    #
-    #         if score >= 0.7 and score <= 1:
-    #             cv2.rectangle(copy, starting_point, finish_point, (0, 0, 255), 1, cv2.LINE_AA)
-    #             plt.imshow(cv2.cvtColor(copy, cv2.COLOR_BGR2RGB))
-    #             plt.show()
-    #             # per stimare l'omografia utilizzo l'algoritmo RANSAC che permette di considerare solo i match corretti e non
-    #             # quelli alterati dal rumore.
-    #             H, mask = cv2.findHomography(query_pts, train_pts, cv2.RANSAC, 5.0)
-    #             h, w, = img_query.shape
-    #             # proietto un rettangolo, con le dimensioni della model image nella target image utilizzando l'omografia
-    #             points_to_project = np.float32([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]]).reshape(-1, 1, 2)
-    #             projected_points = cv2.perspectiveTransform(points_to_project, H)
-    #             return 0, projected_points
-    #         else:
-    #             print("Second check fails")
-    #             return -1, projected_points
-    # else:
-    #     print("Not enough matches found")
-    #     return -1, projected_points
-
 
 def add_rating(image_train, rating_value, sign_points,window_w, window_h):
     height_sign = int(sign_points[3][0][1] - sign_points[0][0][1])
@@ -247,7 +210,10 @@ def capture_click(event, x, y, flags, params):
         coordinates = [(x,y)]
         open_browser(coordinates)
 
-
+def compute_kp_descr(image,sift):
+    kp = sift.detect(image)
+    kp, descriptor = sift.compute(image, kp)
+    return kp, descriptor
 
 #Carico immagine passata come argomento dall'utente
 img_train = cv2.imread(path)
@@ -259,20 +225,18 @@ final_image = []
 # istanzio SIFT
 sift = cv2.xfeatures2d.SIFT_create()
 # trovo i keypoints e descriptors dell'immagine di test
-kp_train = sift.detect(img_train_bw)
-kp_train, descriptor_train = sift.compute(img_train_bw, kp_train)
-showKeyPoints(img_train_bw,kp_train)
+kp_train, descriptor_train = compute_kp_descr(img_train_bw, sift)
+
+# showKeyPoints(img_train_bw,kp_train)
 #per tutte le possibili insegne eseguo il math
 for name in sign_name:
-    print(sign_name)
     print("Current restaurant {}".format(name))
     string = PATH+name
     img_query = cv2.imread(string)
     img_query_bw = cv2.cvtColor(img_query, cv2.COLOR_BGR2GRAY)
     # trovo i keypoints e descriptors dell'immagine query
-    kp_query = sift.detect(img_query_bw)
-    showKeyPoints(img_query_bw,kp_query)
-    kp_query, descriptor_query = sift.compute(img_query_bw, kp_query)
+
+    kp_query, descriptor_query = compute_kp_descr(img_query_bw, sift)
     # eseguo il match dei descriptor
     good_matches = match_descriptor(descriptor_query,descriptor_train)
     code, projected_points = estimate_position(good_matches, kp_query, kp_train, img_train_bw, img_query_bw,img_train)
@@ -293,14 +257,17 @@ if found:
     cv2.namedWindow("image",cv2.WINDOW_KEEPRATIO)
     w_size, h_size = pyautogui.size()
     final_image,height_sign,width_sign,bottom_left_sign_position = add_rating(img_train, info[0], projected_points,int(w_size/2),int(h_size/2))
-    final_image_resized = cv2.resize(final_image,(int(w_size/2),int(h_size/2)))
+    h_f, w_f ,_ = final_image.shape
+    ratio = w_f / h_f
+
+    final_image_resized = cv2.resize(final_image,(int(w_size/2),int((w_size/2))))
     ratio_h = final_image.shape[0]/final_image_resized.shape[0]
     ratio_w = final_image.shape[1] / final_image_resized.shape[1]
     bottom_left_sign_position[0] = int(bottom_left_sign_position[0]/ratio_w)
     bottom_left_sign_position[1] = int(bottom_left_sign_position[1]/ratio_h)
     cv2.rectangle(final_image_resized,(bottom_left_sign_position[0], bottom_left_sign_position[1]),(bottom_left_sign_position[0] + width_sign, bottom_left_sign_position[1] + height_sign) , (255, 0, 0), 1)
     cv2.moveWindow("image",0,0)
-    cv2.resizeWindow("image", int(w_size/2),int(h_size/2))
+    #cv2.resizeWindow("image", int(w_size/2),int(h_size/2))
     cv2.setMouseCallback("image", capture_click)
 
     while True:
@@ -315,25 +282,6 @@ else:
     print("Ristorante non presente nel nostro elenco")
     sys.exit()
 
-
-
-# temp = [{'point0':k.pt[0],'point1':k.pt[1],'size':k.size,'angle': k.angle, 'response': k.response, "octave":k.octave,
-#         "id":k.class_id} for k in kp_query]
-# json_str = json.dumps(temp)
-# print(json_str)
-# print(type(json_str))
-# mySQLConnector.query()
-# mySQLConnector.insert_keypoints(json_str, 'la_prosciutteria.png')
-# mySQLConnector.query()
-# mySQLConnector.close_connection()
-
-
-# if TEST == 1:
-#     showKeyPoints(img_query, kp_query)
-#     showKeyPoints(img_train, kp_train)
-# mySQLConnector.insert_descriptors(descriptor_query,"la_prosciutteria.png")
-# mySQLConnector.query()
-# mySQLConnector.close_connection()
 
 
 
