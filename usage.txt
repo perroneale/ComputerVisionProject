@@ -1,0 +1,2 @@
+Importare il database in mysql workbench, eventualmente modificare username e password nel file mySQLConnector.py
+Lanciare lo script python presente in SignAdvisor, passando come argomento il nome dell'immagine.
