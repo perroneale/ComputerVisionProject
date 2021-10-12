@@ -42,7 +42,7 @@ networkx==2.4
 notebook==6.0.1
 numpy==1.17.2
 opencv-contrib-python==3.4.2.16
-opencv-python==3.4.2.16
+opencv-python==4.2.0.32
 pandas==0.25.2
 pandocfilters==1.4.2
 parso==0.5.1
